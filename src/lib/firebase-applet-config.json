@@ -1,12 +1,12 @@
 {
-  "projectId": "gen-lang-client-0306139868",
-  "appId": "1:932806828680:web:dc8fc9ec41edae9bc5353d",
-  "apiKey": "AIzaSyBNEdfzrveDXLWdwdIGY60BX3zAVDvRHho",
-  "authDomain": "gen-lang-client-0306139868.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-bdtearnpropremiu-69ae8112-eea6-42bd-bc31-d1322cf423b3",
-  "storageBucket": "gen-lang-client-0306139868.firebasestorage.app",
-  "messagingSenderId": "932806828680",
-  "measurementId": "",
-  "oAuthClientId": "932806828680-50numskd0eaevof1p75s0kc09c4621a1.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "projectId": "bdt-earn-pro",
+  "appId": "1:26614115540:web:3fdf151819d85ca7d75f41",
+  "apiKey": "AIzaSyCU6T5EjYERS013LtbZIokCWcdGfwxyzo4",
+  "authDomain": "bdt-earn-pro.firebaseapp.com",
+  "storageBucket": "bdt-earn-pro.firebasestorage.app",
+  "messagingSenderId": "26614115540",
+  "measurementId": "G-BY0H85XQQ7",
+  "oAuthClientId": "",
+  "recaptchaSiteKey": "",
+  "firestoreDatabaseId": "(default)"
 }

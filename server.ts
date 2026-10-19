@@ -30,7 +30,7 @@ interface AdminAccount {
 }
 
 const INITIAL_ADMIN_USERNAME = process.env.ADMIN_INITIAL_USERNAME || 'mdratan';
-const INITIAL_ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD || '789789789';
+const INITIAL_ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD || 'Ratan789';
 
 const adminAccounts: Record<string, AdminAccount> = {
   [INITIAL_ADMIN_USERNAME]: {
@@ -1177,6 +1177,20 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
+
+    app.use('*', async (req, res, next) => {
+      // If it is an API request, let it fall through or 404
+      if (req.originalUrl.startsWith('/api')) {
+        return next();
+      }
+      try {
+        let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+      } catch (e) {
+        next(e);
+      }
+    });
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
     app.use(express.static(distPath));

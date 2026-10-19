@@ -38,6 +38,7 @@ export const AdminPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
 
   // Active Admin Tab
   const [activeTab, setActiveTab] = useState<
@@ -381,7 +382,7 @@ export const AdminPage: React.FC = () => {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="mdratan"
+                placeholder="Enter admin username"
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
@@ -398,6 +399,15 @@ export const AdminPage: React.FC = () => {
                 placeholder="•••••••••"
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
               />
+              <div className="flex justify-end mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setShowRecoveryModal(true)}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
+                >
+                  Forgot Password?
+                </button>
+              </div>
             </div>
 
             {loginError && (
@@ -416,12 +426,33 @@ export const AdminPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Provisioning Guidance */}
-          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-[11px] text-gray-500 dark:text-gray-400 space-y-1">
-            <div className="font-bold text-gray-700 dark:text-gray-300">Initial Credentials Notice:</div>
-            <div>Username: <span className="font-mono text-indigo-600 dark:text-indigo-400">mdratan</span></div>
-            <div>Password: <span className="font-mono text-indigo-600 dark:text-indigo-400">789789789</span></div>
-          </div>
+          {/* Admin Credential Recovery Modal */}
+          {showRecoveryModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+              <div className="w-full max-w-sm p-6 rounded-3xl bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 space-y-4 shadow-2xl text-center">
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <Key className="w-6 h-6" />
+                </div>
+                <h3 className="font-bold text-base text-gray-900 dark:text-white">Admin Credential Recovery</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed text-left">
+                  For platform and financial security, administrative passwords cannot be reset through public unauthenticated endpoints.
+                </p>
+                <div className="p-3.5 rounded-2xl bg-gray-50 dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 text-left text-xs space-y-1.5 text-gray-600 dark:text-gray-300">
+                  <div className="font-bold text-gray-800 dark:text-gray-200">Reset Procedures:</div>
+                  <div>1. Update the <code className="text-indigo-600 dark:text-indigo-400 font-mono text-[11px]">ADMIN_INITIAL_PASSWORD</code> environment variable in your server configuration.</div>
+                  <div>2. If you are a team member, request an access reset from the root system administrator or via <span className="font-semibold text-indigo-600 dark:text-indigo-400">support@bdtearnpro.com</span>.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRecoveryModal(false)}
+                  className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all shadow"
+                >
+                  Back to Login
+                </button>
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
     );
