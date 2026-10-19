@@ -1,0 +1,336 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with status and metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "referralCode": { "type": "string", "maxLength": 32 },
+        "referredBy": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["active", "suspended", "blocked"] },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "email", "status", "role", "referralCode", "createdAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Verified administrator record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 64 },
+        "email": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "enum": ["super_admin", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "username", "role", "createdAt"]
+    },
+    "Wallet": {
+      "title": "Wallet",
+      "description": "User wallet ledger summary with balances in BDT",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "balance": { "type": "number" },
+        "pendingWithdrawal": { "type": "number" },
+        "totalEarned": { "type": "number" },
+        "totalWithdrawn": { "type": "number" },
+        "taskEarnings": { "type": "number" },
+        "referralEarnings": { "type": "number" },
+        "videoAdEarnings": { "type": "number" },
+        "spinEarnings": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "balance", "pendingWithdrawal", "totalEarned", "totalWithdrawn"]
+    },
+    "WalletTransaction": {
+      "title": "WalletTransaction",
+      "description": "Immutable ledger transaction entry for balance updates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "type": {
+          "type": "string",
+          "enum": ["task_reward", "referral_commission", "video_ad_reward", "spin_reward", "withdrawal_hold", "withdrawal_refund", "admin_adjustment"]
+        },
+        "amount": { "type": "number" },
+        "balanceAfter": { "type": "number" },
+        "description": { "type": "string", "maxLength": 255 },
+        "referenceId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "type", "amount", "balanceAfter", "createdAt"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Admin configured timer task with advertisement requirements",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "instructions": { "type": "string", "maxLength": 2000 },
+        "category": { "type": "string", "maxLength": 64 },
+        "rewardBdt": { "type": "number" },
+        "timerDurationSeconds": { "type": "number" },
+        "adRequired": { "type": "boolean" },
+        "adCountdownSeconds": { "type": "number" },
+        "dailyLimit": { "type": "number" },
+        "currentCompletions": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "rewardBdt", "timerDurationSeconds", "adRequired", "status"]
+    },
+    "TaskSession": {
+      "title": "TaskSession",
+      "description": "Server tracked task execution session preventing timer bypass",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "taskId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "adStartedAt": { "type": "string", "format": "date-time" },
+        "adCompletedAt": { "type": "string", "format": "date-time" },
+        "taskStartedAt": { "type": "string", "format": "date-time" },
+        "taskCompletedAt": { "type": "string", "format": "date-time" },
+        "status": {
+          "type": "string",
+          "enum": ["ad_in_progress", "task_in_progress", "ready_to_submit", "completed", "cancelled", "expired"]
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "taskId", "userId", "status", "createdAt"]
+    },
+    "TaskSubmission": {
+      "title": "TaskSubmission",
+      "description": "User completion submission and review record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "taskId": { "type": "string", "maxLength": 128 },
+        "taskSessionId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "submissionNote": { "type": "string", "maxLength": 1000 },
+        "proofUrl": { "type": "string", "maxLength": 500 },
+        "rewardBdt": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "reviewedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "taskId", "taskSessionId", "userId", "rewardBdt", "status", "createdAt"]
+    },
+    "Referral": {
+      "title": "Referral",
+      "description": "Tracks users invited by a referrer and qualifying reward status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "referrerId": { "type": "string", "maxLength": 128 },
+        "referredUserId": { "type": "string", "maxLength": 128 },
+        "referredEmail": { "type": "string", "maxLength": 128 },
+        "commissionBdt": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "qualified", "paid"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "qualifiedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "referrerId", "referredUserId", "commissionBdt", "status", "createdAt"]
+    },
+    "WithdrawalRequest": {
+      "title": "WithdrawalRequest",
+      "description": "Payout request with bKash, Nagad, or Rocket",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "method": { "type": "string", "enum": ["bKash", "Nagad", "Rocket"] },
+        "accountNumber": { "type": "string", "maxLength": 30 },
+        "amountBdt": { "type": "number" },
+        "feeBdt": { "type": "number" },
+        "finalPayableBdt": { "type": "number" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "processing", "paid", "rejected"]
+        },
+        "adminNote": { "type": "string", "maxLength": 500 },
+        "transactionReference": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "method", "accountNumber", "amountBdt", "feeBdt", "finalPayableBdt", "status", "createdAt"]
+    },
+    "SpinHistory": {
+      "title": "SpinHistory",
+      "description": "Record of wheel spin and reward result",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "wonAmountBdt": { "type": "number" },
+        "segmentLabel": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "wonAmountBdt", "segmentLabel", "createdAt"]
+    },
+    "AdCampaign": {
+      "title": "AdCampaign",
+      "description": "Advertising campaign configuration for Adsterra, Monetag, etc.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "provider": { "type": "string", "enum": ["adsterra", "monetag", "custom"] },
+        "format": { "type": "string", "enum": ["rewarded_video", "banner", "social_bar", "popunder", "direct_link"] },
+        "rewardBdt": { "type": "number" },
+        "dailyLimit": { "type": "number" },
+        "targetUrl": { "type": "string", "maxLength": 1000 },
+        "scriptCode": { "type": "string", "maxLength": 2000 },
+        "isEnabled": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "provider", "format", "isEnabled"]
+    },
+    "AdViewRecord": {
+      "title": "AdViewRecord",
+      "description": "Record of user ad impression and validated reward",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "campaignId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "rewardBdt": { "type": "number" },
+        "viewedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "campaignId", "userId", "rewardBdt", "viewedAt"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Global application branding and financial policies",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "appName": { "type": "string", "maxLength": 100 },
+        "logoUrl": { "type": "string", "maxLength": 500 },
+        "currencySymbol": { "type": "string", "maxLength": 10 },
+        "currencyCode": { "type": "string", "maxLength": 10 },
+        "defaultLanguage": { "type": "string", "enum": ["en", "bn"] },
+        "minWithdrawalBdt": { "type": "number" },
+        "maxWithdrawalBdt": { "type": "number" },
+        "withdrawalFeePercent": { "type": "number" },
+        "referralCommissionBdt": { "type": "number" },
+        "supportEmail": { "type": "string", "maxLength": 128 },
+        "telegramChannel": { "type": "string", "maxLength": 255 },
+        "noticeText": { "type": "string", "maxLength": 1000 },
+        "isMaintenance": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "appName", "currencySymbol", "currencyCode", "minWithdrawalBdt", "maxWithdrawalBdt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app notifications for users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 150 },
+        "message": { "type": "string", "maxLength": 500 },
+        "type": { "type": "string", "enum": ["info", "reward", "withdrawal", "alert"] },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "message", "type", "isRead", "createdAt"]
+    },
+    "AdminActivityLog": {
+      "title": "AdminActivityLog",
+      "description": "Security audit trail for administrative operations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "adminId": { "type": "string", "maxLength": 128 },
+        "adminUsername": { "type": "string", "maxLength": 64 },
+        "action": { "type": "string", "maxLength": 100 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "details": { "type": "string", "maxLength": 1000 },
+        "ip": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "adminUsername", "action", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile collection"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Registered administrators"
+    },
+    "/wallets/{walletId}": {
+      "schema": { "$ref": "#/entities/Wallet" },
+      "description": "User wallets storing current balance and earnings"
+    },
+    "/wallet_transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/WalletTransaction" },
+      "description": "Immutable balance transaction entries"
+    },
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "Available tasks configured by administrator"
+    },
+    "/task_sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/TaskSession" },
+      "description": "Active and past task countdown sessions"
+    },
+    "/task_submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/TaskSubmission" },
+      "description": "Task completion submissions"
+    },
+    "/referrals/{referralId}": {
+      "schema": { "$ref": "#/entities/Referral" },
+      "description": "Referral invitations and commissions"
+    },
+    "/withdrawal_requests/{withdrawalId}": {
+      "schema": { "$ref": "#/entities/WithdrawalRequest" },
+      "description": "bKash, Nagad, and Rocket payout requests"
+    },
+    "/spin_history/{spinId}": {
+      "schema": { "$ref": "#/entities/SpinHistory" },
+      "description": "User wheel spin history and won reward records"
+    },
+    "/ad_campaigns/{campaignId}": {
+      "schema": { "$ref": "#/entities/AdCampaign" },
+      "description": "Adsterra and Monetag ad campaigns"
+    },
+    "/ad_view_records/{recordId}": {
+      "schema": { "$ref": "#/entities/AdViewRecord" },
+      "description": "Validated ad view events"
+    },
+    "/app_settings/{settingsId}": {
+      "schema": { "$ref": "#/entities/AppSettings" },
+      "description": "Global application configuration"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "User in-app notifications"
+    },
+    "/admin_activity_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AdminActivityLog" },
+      "description": "Admin activity audit log"
+    }
+  }
+}

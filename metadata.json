@@ -1,0 +1,6 @@
+{
+  "name": "BDT Earn Pro - Premium Task & Rewards Earning",
+  "description": "Premium task earning platform in BDT (৳) with timed tasks, video ads, spin wheel, referral system, and secure admin management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
