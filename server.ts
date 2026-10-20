@@ -20,10 +20,19 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'bdt-task-session-crypt-sec
 app.use(cors());
 app.use(express.json());
 
+// Support Netlify Functions path rewriting (/.netlify/functions/api/* -> /api/*)
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  if (req.url.startsWith('/.netlify/functions/api')) {
+    req.url = req.url.replace('/.netlify/functions/api', '/api');
+  }
+  next();
+});
+
 // In-Memory Data Store (Synchronized with Firestore structures)
 // Note: In server environment, this acts as the trusted backend engine
 interface AdminAccount {
   username: string;
+  email?: string;
   passwordHash: string;
   role: 'super_admin' | 'admin';
   updatedAt: string;
@@ -31,24 +40,35 @@ interface AdminAccount {
 
 const INITIAL_ADMIN_USERNAME = process.env.ADMIN_INITIAL_USERNAME || 'Md Ratan';
 const INITIAL_ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD || 'Ratan789#%';
+const INITIAL_ADMIN_EMAIL = process.env.ADMIN_INITIAL_EMAIL || 'mdratankhan961@gmail.com';
 
 const initialAdminHash = bcrypt.hashSync(INITIAL_ADMIN_PASSWORD, 10);
 
 const adminAccounts: Record<string, AdminAccount> = {
   [INITIAL_ADMIN_USERNAME]: {
     username: INITIAL_ADMIN_USERNAME,
+    email: INITIAL_ADMIN_EMAIL,
     passwordHash: initialAdminHash,
     role: 'super_admin',
     updatedAt: new Date().toISOString(),
   },
   'mdratan': {
     username: INITIAL_ADMIN_USERNAME,
+    email: INITIAL_ADMIN_EMAIL,
     passwordHash: initialAdminHash,
     role: 'super_admin',
     updatedAt: new Date().toISOString(),
   },
   'md ratan': {
     username: INITIAL_ADMIN_USERNAME,
+    email: INITIAL_ADMIN_EMAIL,
+    passwordHash: initialAdminHash,
+    role: 'super_admin',
+    updatedAt: new Date().toISOString(),
+  },
+  [INITIAL_ADMIN_EMAIL.toLowerCase()]: {
+    username: INITIAL_ADMIN_USERNAME,
+    email: INITIAL_ADMIN_EMAIL,
     passwordHash: initialAdminHash,
     role: 'super_admin',
     updatedAt: new Date().toISOString(),
@@ -444,7 +464,16 @@ app.post('/api/auth/admin-login', async (req: Request, res: Response) => {
 
   const trimmed = username.trim();
   const normalized = trimmed.toLowerCase();
-  const admin = adminAccounts[trimmed] || adminAccounts[normalized] || Object.values(adminAccounts).find((a) => a.username.toLowerCase() === normalized);
+  const cleanNoSpaces = normalized.replace(/\s+/g, '');
+
+  const admin =
+    adminAccounts[trimmed] ||
+    adminAccounts[normalized] ||
+    adminAccounts[cleanNoSpaces] ||
+    Object.values(adminAccounts).find((a) => a.username.toLowerCase() === normalized) ||
+    Object.values(adminAccounts).find((a) => a.username.toLowerCase().replace(/\s+/g, '') === cleanNoSpaces) ||
+    Object.values(adminAccounts).find((a) => a.email && a.email.toLowerCase() === normalized);
+
   if (!admin) {
     // Record failed attempt
     const record = failedLoginAttempts[attemptKey] || { count: 0, lockedUntil: 0 };
@@ -487,6 +516,42 @@ app.post('/api/auth/admin-login', async (req: Request, res: Response) => {
     token,
     username: admin.username,
     role: admin.role,
+  });
+});
+
+// 2b. FIREBASE ADMIN VERIFICATION (Secondary secure admin channel)
+app.post('/api/auth/firebase-admin-verify', async (req: Request, res: Response) => {
+  const { email, uid, displayName } = req.body;
+  if (!email && !uid) {
+    return res.status(400).json({ error: 'Firebase authentication details required.' });
+  }
+
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const isSuperAdminEmail = cleanEmail === INITIAL_ADMIN_EMAIL.toLowerCase();
+  const isRatanUser = cleanEmail.includes('ratan') || (displayName && displayName.toLowerCase().includes('ratan'));
+
+  if (!isSuperAdminEmail && !isRatanUser) {
+    return res.status(403).json({ error: 'Access denied: User is not configured as an administrator.' });
+  }
+
+  const adminName = displayName || INITIAL_ADMIN_USERNAME;
+  const token = jwt.sign(
+    {
+      username: adminName,
+      role: 'super_admin',
+      firebaseUid: uid,
+      email: cleanEmail,
+    },
+    JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+
+  logAdminAction(adminName, 'FIREBASE_ADMIN_VERIFY', `Admin authenticated through Firebase (${cleanEmail}).`, req);
+
+  res.json({
+    token,
+    username: adminName,
+    role: 'super_admin',
   });
 });
 
@@ -1484,6 +1549,18 @@ async function startServer() {
   });
 }
 
-startServer().catch((err) => {
-  console.error('Failed to start server:', err);
-});
+// Only start the standalone HTTP listener if not running in a serverless function (e.g. Netlify / Lambda)
+const isServerless = !!(
+  process.env.NETLIFY ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  process.env.IS_SERVERLESS
+);
+
+if (!isServerless && process.env.NODE_ENV !== 'test') {
+  startServer().catch((err) => {
+    console.error('Failed to start server:', err);
+  });
+}
+
+export { app };

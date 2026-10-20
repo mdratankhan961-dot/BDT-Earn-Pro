@@ -6,6 +6,7 @@ import { AdModal } from '../components/AdModal';
 import { TaskWorkflowModal } from '../components/TaskWorkflowModal';
 import { fireRewardConfetti } from '../lib/confetti';
 import { TaskItem } from '../types';
+import { apiFetch } from '../lib/api';
 import {
   Clock,
   Sparkles,
@@ -63,10 +64,9 @@ export const TasksPage: React.FC = () => {
   const fetchTasks = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/tasks');
-      const data = await res.json();
-      if (data.tasks) {
-        setTasks(data.tasks);
+      const res = await apiFetch('/api/tasks');
+      if (res.ok && res.data?.tasks) {
+        setTasks(res.data.tasks);
       }
     } catch (e) {
       console.error('Fetch tasks error:', e);
@@ -83,18 +83,18 @@ export const TasksPage: React.FC = () => {
     }
 
     try {
-      const res = await fetch('/api/tasks/start-session', {
+      const res = await apiFetch('/api/tasks/start-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId: task.id, userId: currentUser.uid }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        showToast(data.error || 'Unable to start task.', 'error');
+      if (!res.ok || !res.data) {
+        showToast(res.error || 'Unable to start task.', 'error');
         return;
       }
 
+      const data = res.data;
       setWorkflowSession({
         isOpen: true,
         sessionId: data.sessionId,

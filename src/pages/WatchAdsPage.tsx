@@ -4,6 +4,7 @@ import { useThemeLanguage } from '../context/ThemeLanguageContext';
 import { useToast } from '../components/Toast';
 import { fireRewardConfetti } from '../lib/confetti';
 import { AdCampaign } from '../types';
+import { apiFetch } from '../lib/api';
 import {
   Video,
   Play,
@@ -38,10 +39,9 @@ export const WatchAdsPage: React.FC = () => {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch('/api/settings');
-      const data = await res.json();
-      if (data.adCampaigns) {
-        setCampaigns(data.adCampaigns);
+      const res = await apiFetch('/api/settings');
+      if (res.ok && res.data?.adCampaigns) {
+        setCampaigns(res.data.adCampaigns);
       }
     } catch (e) {
       console.warn('Failed to load campaigns:', e);
@@ -85,7 +85,7 @@ export const WatchAdsPage: React.FC = () => {
     setClaiming(true);
 
     try {
-      const res = await fetch('/api/ads/reward-view', {
+      const res = await apiFetch('/api/ads/reward-view', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -94,9 +94,8 @@ export const WatchAdsPage: React.FC = () => {
         }),
       });
 
-      const data = await res.json();
       if (!res.ok) {
-        showToast(data.error || 'Failed to claim ad reward.', 'error');
+        showToast(res.error || 'Failed to claim ad reward.', 'error');
         setClaiming(false);
         return;
       }

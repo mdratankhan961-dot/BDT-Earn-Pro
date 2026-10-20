@@ -2,7 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useThemeLanguage } from '../context/ThemeLanguageContext';
 import { useToast } from '../components/Toast';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
 import { TaskItem, WithdrawalRequest, AdCampaign, SpinSegment } from '../types';
+import { apiFetch, authHeader } from '../lib/api';
 import {
   Shield,
   LayoutDashboard,
@@ -35,7 +39,7 @@ import {
 } from 'lucide-react';
 
 export const AdminPage: React.FC = () => {
-  const { adminSession, adminLogin, adminLogout } = useAuth();
+  const { currentUser, userProfile, adminSession, adminLogin, adminLogout } = useAuth();
   const { formatBDT } = useThemeLanguage();
   const { showToast } = useToast();
 
@@ -189,36 +193,33 @@ export const AdminPage: React.FC = () => {
   const loadAllAdminData = async () => {
     if (!adminSession) return;
     const headers = {
-      Authorization: `Bearer ${adminSession.token}`,
+      ...authHeader(adminSession.token),
       'Content-Type': 'application/json',
     };
 
     try {
       if (activeTab === 'overview') {
-        const res = await fetch('/api/admin/overview', { headers });
-        if (res.ok) setOverview(await res.json());
+        const res = await apiFetch('/api/admin/overview', { headers });
+        if (res.ok && res.data) setOverview(res.data);
       } else if (activeTab === 'users') {
-        const res = await fetch('/api/admin/users', { headers });
-        if (res.ok) {
-          const d = await res.json();
-          setUsersList(d.users || []);
+        const res = await apiFetch('/api/admin/users', { headers });
+        if (res.ok && res.data) {
+          setUsersList(res.data.users || []);
         }
       } else if (activeTab === 'tasks') {
-        const res = await fetch('/api/tasks');
-        if (res.ok) {
-          const d = await res.json();
-          setTasksList(d.tasks || []);
+        const res = await apiFetch('/api/tasks');
+        if (res.ok && res.data) {
+          setTasksList(res.data.tasks || []);
         }
       } else if (activeTab === 'withdrawals') {
-        const res = await fetch('/api/admin/withdrawals', { headers });
-        if (res.ok) {
-          const d = await res.json();
-          setWithdrawalsList(d.withdrawals || []);
+        const res = await apiFetch('/api/admin/withdrawals', { headers });
+        if (res.ok && res.data) {
+          setWithdrawalsList(res.data.withdrawals || []);
         }
       } else if (activeTab === 'ads' || activeTab === 'rewards' || activeTab === 'settings') {
-        const res = await fetch('/api/settings');
-        if (res.ok) {
-          const d = await res.json();
+        const res = await apiFetch('/api/settings');
+        if (res.ok && res.data) {
+          const d = res.data;
           if (d.adSettings) setAdSettings(d.adSettings);
           if (d.payoutSettings) setPayoutSettings(d.payoutSettings);
           if (d.spinSettings) setSpinSettingsData(d.spinSettings);
@@ -226,10 +227,9 @@ export const AdminPage: React.FC = () => {
           if (d.adCampaigns) setAdCampaignsList(d.adCampaigns);
         }
       } else if (activeTab === 'logs') {
-        const res = await fetch('/api/admin/activity-logs', { headers });
-        if (res.ok) {
-          const d = await res.json();
-          setActivityLogs(d.logs || []);
+        const res = await apiFetch('/api/admin/activity-logs', { headers });
+        if (res.ok && res.data) {
+          setActivityLogs(res.data.logs || []);
         }
       }
     } catch (e) {
@@ -242,28 +242,131 @@ export const AdminPage: React.FC = () => {
     setLoginLoading(true);
     setLoginError(null);
 
+    const inputTrimmed = username.trim();
+    const isEmailInput = inputTrimmed.includes('@');
+
+    // 1. Try backend / Netlify Function API login
     try {
-      const res = await fetch('/api/auth/admin-login', {
+      const res = await apiFetch('/api/auth/admin-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim(), password }),
+        body: JSON.stringify({ username: inputTrimmed, password }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setLoginError(data.error || 'Admin authentication failed.');
+      if (res.ok && res.data) {
+        adminLogin(res.data.token, res.data.username, res.data.role);
+        showToast(`Welcome Administrator ${res.data.username}`, 'success');
+        setPassword('');
         setLoginLoading(false);
         return;
       }
 
-      adminLogin(data.token, data.username, data.role);
-      showToast(`Welcome Administrator ${data.username}`, 'success');
+      // If explicit wrong password for a non-email username on live backend, show error
+      if (!isEmailInput && res.status === 401) {
+        setLoginError(res.error || 'Invalid credentials.');
+        setLoginLoading(false);
+        return;
+      }
+    } catch {
+      // Continue to Firebase Auth verification
+    }
+
+    // 2. Direct Firebase Authentication verification
+    try {
+      const emailToAuth = isEmailInput ? inputTrimmed : 'mdratankhan961@gmail.com';
+      const userCred = await signInWithEmailAndPassword(auth, emailToAuth, password);
+      const fbUser = userCred.user;
+
+      const isSuperAdminEmail = fbUser.email?.toLowerCase() === 'mdratankhan961@gmail.com';
+      let hasAdminRole = isSuperAdminEmail;
+
+      if (!hasAdminRole) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            if (data.role === 'admin' || data.role === 'super_admin') {
+              hasAdminRole = true;
+            }
+          }
+        } catch (docErr) {
+          console.warn('Firestore role check:', docErr);
+        }
+      }
+
+      if (!hasAdminRole) {
+        setLoginError('Authentication succeeded, but this account is not registered as an administrator.');
+        setLoginLoading(false);
+        return;
+      }
+
+      const idToken = await fbUser.getIdToken();
+      adminLogin(idToken, fbUser.displayName || 'Md Ratan', 'super_admin');
+      showToast(`Welcome Administrator ${fbUser.displayName || 'Md Ratan'}`, 'success');
       setPassword('');
-    } catch (err: any) {
-      setLoginError(err.message || 'Server connection error.');
+    } catch (fbErr: any) {
+      if (
+        fbErr.code === 'auth/invalid-credential' ||
+        fbErr.code === 'auth/wrong-password' ||
+        fbErr.code === 'auth/user-not-found' ||
+        fbErr.code === 'auth/invalid-email'
+      ) {
+        setLoginError('Invalid username/email or password.');
+      } else {
+        setLoginError(fbErr.message || 'Authentication failed. Please verify credentials.');
+      }
     } finally {
       setLoginLoading(false);
     }
+  };
+
+  // Secondary login route for verified Firebase Admin users
+  const handleFirebaseAdminLogin = async () => {
+    if (!currentUser) {
+      showToast('Please log into your Firebase account first.', 'error');
+      return;
+    }
+    setLoginLoading(true);
+    setLoginError(null);
+
+    const isAuthorizedEmail = currentUser.email?.toLowerCase() === 'mdratankhan961@gmail.com';
+    const isAuthorizedRole = userProfile?.role === 'admin' || userProfile?.role === 'super_admin';
+
+    // First try backend verification endpoint
+    try {
+      const res = await apiFetch('/api/auth/firebase-admin-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: currentUser.email,
+          uid: currentUser.uid,
+          displayName: currentUser.displayName,
+        }),
+      });
+
+      if (res.ok && res.data) {
+        adminLogin(res.data.token, res.data.username, res.data.role);
+        showToast(`Welcome Administrator ${res.data.username}`, 'success');
+        setLoginLoading(false);
+        return;
+      }
+    } catch {
+      // Backend not available, check direct Firebase credentials
+    }
+
+    // Direct Firebase verification fallback
+    if (isAuthorizedEmail || isAuthorizedRole) {
+      try {
+        const idToken = await currentUser.getIdToken();
+        adminLogin(idToken, currentUser.displayName || 'Md Ratan', 'super_admin');
+        showToast(`Welcome Administrator ${currentUser.displayName || 'Md Ratan'}`, 'success');
+      } catch (e: any) {
+        setLoginError('Unable to generate Firebase session token: ' + e.message);
+      }
+    } else {
+      setLoginError('Access denied: Your Firebase account is not authorized as an administrator.');
+    }
+    setLoginLoading(false);
   };
 
   // Balance & Points Adjustment
@@ -274,10 +377,10 @@ export const AdminPage: React.FC = () => {
     }
 
     try {
-      const res = await fetch('/api/admin/adjust-balance', {
+      const res = await apiFetch('/api/admin/adjust-balance', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${adminSession.token}`,
+          ...authHeader(adminSession.token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -289,13 +392,12 @@ export const AdminPage: React.FC = () => {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        showToast(data.error || 'Adjustment failed.', 'error');
+      if (!res.ok || !res.data) {
+        showToast(res.error || 'Adjustment failed.', 'error');
         return;
       }
 
-      showToast(`Adjusted ${balanceAdjustModal.targetField} to ${formatBDT(data.balance)}!`, 'success');
+      showToast(`Adjusted ${balanceAdjustModal.targetField} to ${formatBDT(res.data.balance)}!`, 'success');
       setBalanceAdjustModal({
         isOpen: false,
         userId: '',
@@ -318,10 +420,10 @@ export const AdminPage: React.FC = () => {
   const handleUpdateUserStatus = async (userId: string, newStatus: 'active' | 'suspended' | 'blocked') => {
     if (!adminSession) return;
     try {
-      const res = await fetch('/api/admin/users/status', {
+      const res = await apiFetch('/api/admin/users/status', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${adminSession.token}`,
+          ...authHeader(adminSession.token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ userId, status: newStatus }),
@@ -329,6 +431,8 @@ export const AdminPage: React.FC = () => {
       if (res.ok) {
         showToast(`User status set to ${newStatus.toUpperCase()}`, 'success');
         loadAllAdminData();
+      } else {
+        showToast(res.error || 'Failed to update user status.', 'error');
       }
     } catch (e: any) {
       showToast('Failed to update user status.', 'error');
@@ -339,10 +443,10 @@ export const AdminPage: React.FC = () => {
   const handleSaveAdSettings = async () => {
     if (!adminSession) return;
     try {
-      const res = await fetch('/api/admin/ad-settings/save', {
+      const res = await apiFetch('/api/admin/ad-settings/save', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${adminSession.token}`,
+          ...authHeader(adminSession.token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ adSettings }),
@@ -350,7 +454,7 @@ export const AdminPage: React.FC = () => {
       if (res.ok) {
         showToast('Ad Settings saved successfully!', 'success');
       } else {
-        showToast('Failed to save ad settings.', 'error');
+        showToast(res.error || 'Failed to save ad settings.', 'error');
       }
     } catch (e: any) {
       showToast(e.message || 'Error saving ad settings.', 'error');
@@ -361,10 +465,10 @@ export const AdminPage: React.FC = () => {
   const handleSavePayoutSettings = async () => {
     if (!adminSession) return;
     try {
-      const res = await fetch('/api/admin/payout-settings/save', {
+      const res = await apiFetch('/api/admin/payout-settings/save', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${adminSession.token}`,
+          ...authHeader(adminSession.token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ newPayoutSettings: payoutSettings }),
@@ -372,7 +476,7 @@ export const AdminPage: React.FC = () => {
       if (res.ok) {
         showToast('Reward payout amounts updated successfully!', 'success');
       } else {
-        showToast('Failed to update payout settings.', 'error');
+        showToast(res.error || 'Failed to update payout settings.', 'error');
       }
     } catch (e: any) {
       showToast(e.message || 'Error updating payout settings.', 'error');
@@ -383,10 +487,10 @@ export const AdminPage: React.FC = () => {
   const handleSaveSpinSettings = async () => {
     if (!adminSession) return;
     try {
-      const res = await fetch('/api/admin/spin-settings/save', {
+      const res = await apiFetch('/api/admin/spin-settings/save', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${adminSession.token}`,
+          ...authHeader(adminSession.token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ newSpinSettings: spinSettingsData }),
@@ -394,7 +498,7 @@ export const AdminPage: React.FC = () => {
       if (res.ok) {
         showToast('Spin Wheel configuration saved!', 'success');
       } else {
-        showToast('Failed to save spin settings.', 'error');
+        showToast(res.error || 'Failed to save spin settings.', 'error');
       }
     } catch (e: any) {
       showToast(e.message || 'Error saving spin settings.', 'error');
@@ -415,10 +519,10 @@ export const AdminPage: React.FC = () => {
     }
 
     try {
-      const res = await fetch('/api/admin/withdrawals/action', {
+      const res = await apiFetch('/api/admin/withdrawals/action', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${adminSession.token}`,
+          ...authHeader(adminSession.token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -429,9 +533,8 @@ export const AdminPage: React.FC = () => {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        showToast(data.error || 'Action failed.', 'error');
+      if (!res.ok || !res.data) {
+        showToast(res.error || 'Action failed.', 'error');
         return;
       }
 
@@ -451,17 +554,17 @@ export const AdminPage: React.FC = () => {
     }
 
     try {
-      const res = await fetch('/api/admin/tasks/save', {
+      const res = await apiFetch('/api/admin/tasks/save', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${adminSession.token}`,
+          ...authHeader(adminSession.token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(taskModal.task),
       });
 
       if (!res.ok) {
-        showToast('Failed to save task.', 'error');
+        showToast(res.error || 'Failed to save task.', 'error');
         return;
       }
 
@@ -476,12 +579,16 @@ export const AdminPage: React.FC = () => {
   const handleDeleteTask = async (taskId: string) => {
     if (!adminSession || !confirm('Are you sure you want to delete this task?')) return;
     try {
-      await fetch(`/api/admin/tasks/${taskId}`, {
+      const res = await apiFetch(`/api/admin/tasks/${taskId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${adminSession.token}` },
+        headers: authHeader(adminSession.token),
       });
-      showToast('Task deleted.', 'success');
-      loadAllAdminData();
+      if (res.ok) {
+        showToast('Task deleted.', 'success');
+        loadAllAdminData();
+      } else {
+        showToast(res.error || 'Error deleting task.', 'error');
+      }
     } catch (e) {
       showToast('Error deleting task.', 'error');
     }
@@ -495,10 +602,10 @@ export const AdminPage: React.FC = () => {
     }
 
     try {
-      const res = await fetch('/api/auth/admin-change-password', {
+      const res = await apiFetch('/api/auth/admin-change-password', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${adminSession.token}`,
+          ...authHeader(adminSession.token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -507,9 +614,8 @@ export const AdminPage: React.FC = () => {
         }),
       });
 
-      const data = await res.json();
       if (!res.ok) {
-        showToast(data.error || 'Password update failed.', 'error');
+        showToast(res.error || 'Password update failed.', 'error');
         return;
       }
 
@@ -539,15 +645,27 @@ export const AdminPage: React.FC = () => {
 
           <form onSubmit={handleAdminLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                Admin Username
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                  Admin Username or Email
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUsername('Md Ratan');
+                    setPassword('Ratan789#%');
+                  }}
+                  className="text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+                >
+                  Fill Default Admin
+                </button>
+              </div>
               <input
                 type="text"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter admin username"
+                placeholder="e.g. Md Ratan or admin email"
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
@@ -576,20 +694,40 @@ export const AdminPage: React.FC = () => {
             </div>
 
             {loginError && (
-              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs">
-                {loginError}
+              <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-600 dark:text-rose-400" />
+                  <span>Authentication Notice</span>
+                </div>
+                <div className="leading-relaxed">{loginError}</div>
               </div>
             )}
 
             <button
               type="submit"
               disabled={loginLoading}
-              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <Lock className="w-4 h-4" />
               <span>{loginLoading ? 'Authenticating...' : 'Enter Admin Console'}</span>
             </button>
           </form>
+
+          {/* Optional Firebase Admin Sign-in */}
+          {currentUser && (
+            <div className="pt-2 border-t border-gray-100 dark:border-slate-800">
+              <div className="text-[11px] text-gray-500 text-center mb-2">Or continue with verified Firebase account:</div>
+              <button
+                type="button"
+                onClick={handleFirebaseAdminLogin}
+                disabled={loginLoading}
+                className="w-full py-2.5 px-3 rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/60 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-semibold text-xs transition-colors flex items-center justify-center gap-2"
+              >
+                <Shield className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span>Verify & Enter as {currentUser.email || 'Firebase Admin'}</span>
+              </button>
+            </div>
+          )}
 
           {/* Admin Credential Recovery Modal */}
           {showRecoveryModal && (

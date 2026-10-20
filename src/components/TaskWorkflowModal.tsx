@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { fireRewardConfetti, fireBigWinConfetti } from '../lib/confetti';
 import { TaskItem } from '../types';
+import { apiFetch } from '../lib/api';
 
 interface TaskWorkflowModalProps {
   isOpen: boolean;
@@ -116,14 +117,13 @@ export const TaskWorkflowModal: React.FC<TaskWorkflowModalProps> = ({
     setAdVerifying(true);
     setErrorMessage(null);
     try {
-      const res = await fetch('/api/tasks/validate-ad', {
+      const res = await apiFetch('/api/tasks/validate-ad', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, userId }),
       });
-      const data = await res.json();
       if (!res.ok) {
-        setErrorMessage(data.error || 'Ad verification failed.');
+        setErrorMessage(res.error || 'Ad verification failed.');
         setAdVerifying(false);
         return;
       }
@@ -172,14 +172,13 @@ export const TaskWorkflowModal: React.FC<TaskWorkflowModalProps> = ({
     setVideoVerifying(true);
     setErrorMessage(null);
     try {
-      const res = await fetch('/api/tasks/validate-video', {
+      const res = await apiFetch('/api/tasks/validate-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, userId }),
       });
-      const data = await res.json();
       if (!res.ok) {
-        setErrorMessage(data.error || 'Video verification failed.');
+        setErrorMessage(res.error || 'Video verification failed.');
         setVideoVerifying(false);
         return;
       }
@@ -197,19 +196,19 @@ export const TaskWorkflowModal: React.FC<TaskWorkflowModalProps> = ({
     setClaiming(true);
     setErrorMessage(null);
     try {
-      const res = await fetch('/api/tasks/claim', {
+      const res = await apiFetch('/api/tasks/claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, userId }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setErrorMessage(data.error || 'Claiming reward failed.');
+      if (!res.ok || !res.data) {
+        setErrorMessage(res.error || 'Claiming reward failed.');
         setClaiming(false);
         return;
       }
 
+      const data = res.data;
       setClaimedReward(data.rewardBdt || rewardBdt);
       setClaimedNewBalance(data.balance);
       setCurrentStep('completed');

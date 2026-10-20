@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { UserProfile, Wallet, AdminSession } from '../types';
+import { apiFetch } from '../lib/api';
 
 interface AuthContextType {
   currentUser: FirebaseUser | null;
@@ -278,7 +279,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentUser) return;
     try {
       // 1. Fetch latest server wallet
-      const res = await fetch('/api/users/sync', {
+      const res = await apiFetch('/api/users/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -288,24 +289,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }),
       });
 
-      if (res.ok) {
-        const d = await res.json();
-        if (d.wallet) {
-          setWallet({
-            id: currentUser.uid,
-            userId: currentUser.uid,
-            balance: Number(d.wallet.balance) || 0,
-            pendingWithdrawal: Number(d.wallet.pendingWithdrawal) || 0,
-            totalEarned: Number(d.wallet.totalEarned) || 0,
-            totalWithdrawn: Number(d.wallet.totalWithdrawn) || 0,
-            taskEarnings: Number(d.wallet.taskEarnings) || 0,
-            referralEarnings: Number(d.wallet.referralEarnings) || 0,
-            videoAdEarnings: Number(d.wallet.videoAdEarnings) || 0,
-            spinEarnings: Number(d.wallet.spinEarnings) || 0,
-            updatedAt: new Date().toISOString(),
-          });
-          return;
-        }
+      if (res.ok && res.data?.wallet) {
+        const w = res.data.wallet;
+        setWallet({
+          id: currentUser.uid,
+          userId: currentUser.uid,
+          balance: Number(w.balance) || 0,
+          pendingWithdrawal: Number(w.pendingWithdrawal) || 0,
+          totalEarned: Number(w.totalEarned) || 0,
+          totalWithdrawn: Number(w.totalWithdrawn) || 0,
+          taskEarnings: Number(w.taskEarnings) || 0,
+          referralEarnings: Number(w.referralEarnings) || 0,
+          videoAdEarnings: Number(w.videoAdEarnings) || 0,
+          spinEarnings: Number(w.spinEarnings) || 0,
+          updatedAt: new Date().toISOString(),
+        });
+        return;
       }
 
       // 2. Fallback to Firestore wallet document

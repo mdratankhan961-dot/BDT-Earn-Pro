@@ -1,0 +1,24 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["dist/**"]
+
+# 1. API proxy rule: route all /api/* requests to Netlify serverless function
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+# 2. SPA fallback rule: route all HTML page navigations to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

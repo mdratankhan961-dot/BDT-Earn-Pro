@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { SpinSegment } from '../types';
 import { fireBigWinConfetti } from '../lib/confetti';
 import { Sparkles, Award } from 'lucide-react';
+import { apiFetch } from '../lib/api';
 
 interface SpinWheelProps {
   segments: SpinSegment[];
@@ -107,20 +108,19 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
 
     try {
       // 1. Authoritative backend RNG determination!
-      const res = await fetch('/api/spin/play', {
+      const res = await apiFetch('/api/spin/play', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setErrorMsg(data.error || 'Failed to spin.');
+      if (!res.ok || !res.data) {
+        setErrorMsg(res.error || 'Failed to spin.');
         setSpinning(false);
         return;
       }
 
-      const { segmentIndex, wonSegment, balance } = data;
+      const { segmentIndex, wonSegment, balance } = res.data;
 
       // 2. Compute target stop angle
       // The pointer is at 12 o'clock (angle 3*PI/2)
