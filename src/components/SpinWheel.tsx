@@ -125,14 +125,15 @@ export const SpinWheel: React.FC<SpinWheelProps> = ({
       // 2. Compute target stop angle
       // The pointer is at 12 o'clock (angle 3*PI/2)
       // To bring segmentIndex under the top pointer:
+      const startAngle = rotationAngle % (2 * Math.PI);
       const targetSegmentAngle = segmentIndex * segmentAngle + segmentAngle / 2;
-      // top pointer is at -Math.PI / 2
-      const fullRotations = 5 + Math.floor(Math.random() * 3); // 5 to 7 full spins
-      const targetAngle = (3 * Math.PI) / 2 - targetSegmentAngle + fullRotations * 2 * Math.PI;
+      let targetAngle = (3 * Math.PI) / 2 - targetSegmentAngle;
+      while (targetAngle <= startAngle + 6 * Math.PI) {
+        targetAngle += 2 * Math.PI;
+      }
 
       const duration = 4000;
       const startTime = performance.now();
-      const startAngle = rotationAngle % (2 * Math.PI);
 
       const animate = (currentTime: number) => {
         const elapsed = currentTime - startTime;

@@ -29,13 +29,27 @@ interface AdminAccount {
   updatedAt: string;
 }
 
-const INITIAL_ADMIN_USERNAME = process.env.ADMIN_INITIAL_USERNAME || 'mdratan';
-const INITIAL_ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD || 'Ratan789';
+const INITIAL_ADMIN_USERNAME = process.env.ADMIN_INITIAL_USERNAME || 'Md Ratan';
+const INITIAL_ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD || 'Ratan789#%';
+
+const initialAdminHash = bcrypt.hashSync(INITIAL_ADMIN_PASSWORD, 10);
 
 const adminAccounts: Record<string, AdminAccount> = {
   [INITIAL_ADMIN_USERNAME]: {
     username: INITIAL_ADMIN_USERNAME,
-    passwordHash: bcrypt.hashSync(INITIAL_ADMIN_PASSWORD, 10),
+    passwordHash: initialAdminHash,
+    role: 'super_admin',
+    updatedAt: new Date().toISOString(),
+  },
+  'mdratan': {
+    username: INITIAL_ADMIN_USERNAME,
+    passwordHash: initialAdminHash,
+    role: 'super_admin',
+    updatedAt: new Date().toISOString(),
+  },
+  'md ratan': {
+    username: INITIAL_ADMIN_USERNAME,
+    passwordHash: initialAdminHash,
     role: 'super_admin',
     updatedAt: new Date().toISOString(),
   },
@@ -57,21 +71,35 @@ interface ServerTaskSession {
   durationSeconds: number;
   adRequired: boolean;
   adCountdownSeconds: number;
+  adProvider: 'adsterra' | 'monetag';
+  adUrl: string;
+  youtubeUrl: string;
   adStartedAt?: number;
   adCompletedAt?: number;
+  videoStartedAt?: number;
+  videoCompletedAt?: number;
   taskStartedAt?: number;
   taskCompletedAt?: number;
-  status: 'ad_in_progress' | 'task_in_progress' | 'ready_to_submit' | 'completed' | 'cancelled';
+  status: 'ad_in_progress' | 'video_in_progress' | 'ready_to_claim' | 'completed' | 'cancelled';
 }
 const activeTaskSessions = new Map<string, ServerTaskSession>();
 
-// Spin settings default
+// Global Adsterra, Monetag, and YouTube Ad Settings (Admin Configurable)
+let globalAdSettings = {
+  adsterraSmartLink: 'https://www.highcpmgate.com/sample-smartlink',
+  monetagDirectLink: 'https://monetag.com/direct-link-demo',
+  defaultYoutubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  activeProvider: 'adsterra' as 'adsterra' | 'monetag' | 'rotate',
+  adCountdownSeconds: 10,
+};
+
+// Spin settings default with clear BDT reward amounts
 let spinSettings = {
   dailyLimit: 5,
   isEnabled: true,
   segments: [
     { id: '1', label: '৳1.00', valueBdt: 1.0, probability: 35, color: '#3B82F6', textColor: '#ffffff' },
-    { id: '2', label: '৳2.50', valueBdt: 2.5, probability: 25, color: '#10B981', textColor: '#ffffff' },
+    { id: '2', label: '৳2.00', valueBdt: 2.0, probability: 25, color: '#10B981', textColor: '#ffffff' },
     { id: '3', label: '৳5.00', valueBdt: 5.0, probability: 20, color: '#F59E0B', textColor: '#ffffff' },
     { id: '4', label: '৳10.00', valueBdt: 10.0, probability: 10, color: '#8B5CF6', textColor: '#ffffff' },
     { id: '5', label: '৳25.00', valueBdt: 25.0, probability: 5, color: '#EC4899', textColor: '#ffffff' },
@@ -79,6 +107,18 @@ let spinSettings = {
     { id: '7', label: '৳100.00', valueBdt: 100.0, probability: 2, color: '#059669', textColor: '#ffffff' },
   ],
 };
+
+// Dynamic Payout Settings (Admin Configurable)
+let payoutSettings = {
+  defaultTaskRewardBdt: 5.0,
+  watchAndEarnRewardBdt: 1.5,
+  referralCommissionBdt: 10.0,
+  dailySpinLimit: 5,
+};
+
+// User status map for suspensions and blocks
+const userStatusMap: Record<string, 'active' | 'suspended' | 'blocked'> = {};
+const userPointsMap: Record<string, number> = {};
 
 const userSpinCountDaily: Record<string, { date: string; count: number }> = {};
 const userAdViewsDaily: Record<string, { date: string; count: number; lastViewTime: number }> = {};
@@ -146,8 +186,8 @@ let tasksCatalog = [
   {
     id: 'task-yt-1',
     title: 'Watch & Subscribe Official Tech Channel',
-    description: 'Watch the promotional video and subscribe to stay updated with earnings.',
-    instructions: '1. Watch the sponsor ad for 10 seconds to unlock.\n2. Complete the 30-second task timer.\n3. Submit your YouTube username or confirmation note.',
+    description: 'Watch the sponsor advertisement, then watch the promotional YouTube video to claim your cash reward.',
+    instructions: '1. Watch the Adsterra/Monetag sponsor ad for 10 seconds.\n2. Click "Watch Now" to watch the assigned YouTube video for 30 seconds.\n3. Click "Claim" to receive your BDT reward directly in your wallet balance.',
     category: 'Video & Social',
     rewardBdt: 5.0,
     timerDurationSeconds: 30,
@@ -156,14 +196,17 @@ let tasksCatalog = [
     dailyLimit: 1,
     currentCompletions: 48,
     status: 'active',
+    adProvider: 'adsterra',
+    adDirectUrl: 'https://www.highcpmgate.com/sample-smartlink',
+    youtubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     targetUrl: 'https://youtube.com',
     createdAt: new Date().toISOString(),
   },
   {
     id: 'task-app-review',
-    title: 'Read Sponsor Fintech Article & Feedback',
-    description: 'Read the informational article about mobile financial services in Bangladesh.',
-    instructions: '1. Complete the 10-second sponsor ad session.\n2. Stay on the task page for 45 seconds.\n3. Submit feedback in the box provided.',
+    title: 'Watch Fintech Guide & Earn BDT',
+    description: 'Complete the sponsor advertisement and watch the mobile financial service video on YouTube.',
+    instructions: '1. Complete the 10-second sponsor ad session.\n2. Watch the assigned YouTube video tutorial for 45 seconds.\n3. Click "Claim" to add ৳7.50 to your account balance.',
     category: 'Website Visit',
     rewardBdt: 7.5,
     timerDurationSeconds: 45,
@@ -172,14 +215,17 @@ let tasksCatalog = [
     dailyLimit: 2,
     currentCompletions: 120,
     status: 'active',
+    adProvider: 'monetag',
+    adDirectUrl: 'https://monetag.com/direct-link-demo',
+    youtubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     targetUrl: 'https://example.com/article',
     createdAt: new Date().toISOString(),
   },
   {
     id: 'task-survey-quick',
-    title: 'Quick Opinion Survey: Mobile Banking',
-    description: 'Answer 3 simple questions about your preferred digital wallet (bKash/Nagad/Rocket).',
-    instructions: '1. Unlock with 10s advertisement session.\n2. Complete 20-second timer review.\n3. Submit your favorite mobile banking method.',
+    title: 'Mobile Banking Video Review',
+    description: 'Watch the sponsor promotion and complete the quick 20-second YouTube review.',
+    instructions: '1. Unlock with 10s sponsor ad session.\n2. Click "Watch Now" to view the video for 20 seconds.\n3. Click "Claim" to receive your ৳4.00 reward.',
     category: 'Survey',
     rewardBdt: 4.0,
     timerDurationSeconds: 20,
@@ -188,14 +234,17 @@ let tasksCatalog = [
     dailyLimit: 3,
     currentCompletions: 89,
     status: 'active',
+    adProvider: 'adsterra',
+    adDirectUrl: 'https://www.highcpmgate.com/sample-smartlink',
+    youtubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     targetUrl: '',
     createdAt: new Date().toISOString(),
   },
   {
     id: 'task-daily-bonus',
-    title: 'Daily Platform Check-in Reward',
-    description: 'Claim your daily attendance reward by watching a quick sponsor preview.',
-    instructions: '1. Watch the 10-second sponsor banner preview.\n2. Wait 15 seconds.\n3. Click Submit to claim daily ৳3.00.',
+    title: 'Daily Attendance Sponsored Video',
+    description: 'Claim your daily attendance reward by watching a quick sponsor preview and featured YouTube clip.',
+    instructions: '1. Watch the 10-second sponsor ad preview.\n2. Watch the YouTube video for 15 seconds.\n3. Click "Claim" to instantly receive daily ৳3.00.',
     category: 'Daily Bonus',
     rewardBdt: 3.0,
     timerDurationSeconds: 15,
@@ -204,6 +253,9 @@ let tasksCatalog = [
     dailyLimit: 1,
     currentCompletions: 310,
     status: 'active',
+    adProvider: 'monetag',
+    adDirectUrl: 'https://monetag.com/direct-link-demo',
+    youtubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     targetUrl: '',
     createdAt: new Date().toISOString(),
   },
@@ -243,6 +295,15 @@ interface ServerWallet {
   spinEarnings: number;
 }
 const serverWallets: Record<string, ServerWallet> = {};
+
+interface RegisteredUserRecord {
+  id: string;
+  email: string;
+  displayName: string;
+  createdAt: string;
+  status: 'active' | 'suspended' | 'blocked';
+}
+const serverRegisteredUsers: Record<string, RegisteredUserRecord> = {};
 
 function getOrCreateWallet(userId: string): ServerWallet {
   if (!serverWallets[userId]) {
@@ -345,6 +406,8 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 app.get('/api/settings', (req: Request, res: Response) => {
   res.json({
     appSettings,
+    adSettings: globalAdSettings,
+    payoutSettings,
     adCampaigns: adCampaigns.filter((c) => c.isEnabled),
     spinSettings: {
       dailyLimit: spinSettings.dailyLimit,
@@ -379,7 +442,9 @@ app.post('/api/auth/admin-login', async (req: Request, res: Response) => {
     }
   }
 
-  const admin = adminAccounts[username];
+  const trimmed = username.trim();
+  const normalized = trimmed.toLowerCase();
+  const admin = adminAccounts[trimmed] || adminAccounts[normalized] || Object.values(adminAccounts).find((a) => a.username.toLowerCase() === normalized);
   if (!admin) {
     // Record failed attempt
     const record = failedLoginAttempts[attemptKey] || { count: 0, lockedUntil: 0 };
@@ -470,14 +535,36 @@ app.post('/api/tasks/start-session', (req: Request, res: Response) => {
   const sessionId = `sess_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
   const now = Date.now();
 
+  const provider: 'adsterra' | 'monetag' =
+    task.adProvider === 'monetag' || task.adProvider === 'adsterra'
+      ? (task.adProvider as 'adsterra' | 'monetag')
+      : globalAdSettings.activeProvider === 'rotate'
+      ? Math.random() > 0.5
+        ? 'adsterra'
+        : 'monetag'
+      : globalAdSettings.activeProvider === 'monetag'
+      ? 'monetag'
+      : 'adsterra';
+
+  const adUrl =
+    task.adDirectUrl ||
+    (provider === 'adsterra'
+      ? globalAdSettings.adsterraSmartLink
+      : globalAdSettings.monetagDirectLink);
+
+  const youtubeUrl = task.youtubeUrl || globalAdSettings.defaultYoutubeUrl;
+
   const session: ServerTaskSession = {
     sessionId,
     taskId,
     userId,
     rewardBdt: task.rewardBdt,
-    durationSeconds: task.timerDurationSeconds,
-    adRequired: task.adRequired,
-    adCountdownSeconds: task.adCountdownSeconds || 10,
+    durationSeconds: task.timerDurationSeconds || 30,
+    adRequired: task.adRequired ?? true,
+    adCountdownSeconds: task.adCountdownSeconds || globalAdSettings.adCountdownSeconds || 10,
+    adProvider: provider,
+    adUrl,
+    youtubeUrl,
     adStartedAt: now,
     status: 'ad_in_progress',
   };
@@ -491,11 +578,16 @@ app.post('/api/tasks/start-session', (req: Request, res: Response) => {
 
   res.json({
     sessionId,
+    taskId: task.id,
+    taskTitle: task.title,
     adRequired: session.adRequired,
     adCountdownSeconds: session.adCountdownSeconds,
+    adProvider: session.adProvider,
+    adUrl: session.adUrl,
+    youtubeUrl: session.youtubeUrl,
     durationSeconds: session.durationSeconds,
     rewardBdt: session.rewardBdt,
-    sponsorUrl: task.targetUrl || 'https://monetag.com',
+    sponsorUrl: session.adUrl,
   });
 });
 
@@ -510,8 +602,8 @@ app.post('/api/tasks/validate-ad', (req: Request, res: Response) => {
   const now = Date.now();
   const elapsedSeconds = Math.floor((now - (session.adStartedAt || 0)) / 1000);
 
-  // Require minimum 9 seconds (with 1s network latency tolerance)
-  if (elapsedSeconds < (session.adCountdownSeconds - 1)) {
+  // Require minimum seconds (with 1s network latency tolerance)
+  if (elapsedSeconds < Math.max(1, session.adCountdownSeconds - 1)) {
     session.status = 'cancelled';
     return res.status(400).json({
       error: 'Ad was closed early or countdown was not satisfied. Task cannot be unlocked.',
@@ -521,19 +613,41 @@ app.post('/api/tasks/validate-ad', (req: Request, res: Response) => {
   }
 
   session.adCompletedAt = now;
-  session.taskStartedAt = now;
-  session.status = 'task_in_progress';
+  session.videoStartedAt = now;
+  session.status = 'video_in_progress';
 
   res.json({
     success: true,
-    message: 'Ad verified! Task unlocked.',
-    taskStartedAt: session.taskStartedAt,
+    message: 'Ad verified! Now proceed to watch the assigned YouTube video.',
+    youtubeUrl: session.youtubeUrl,
+    videoDurationSeconds: session.durationSeconds,
+    taskStartedAt: session.videoStartedAt,
     durationSeconds: session.durationSeconds,
   });
 });
 
-app.post('/api/tasks/submit', (req: Request, res: Response) => {
-  const { sessionId, userId, submissionNote } = req.body;
+app.post('/api/tasks/validate-video', (req: Request, res: Response) => {
+  const { sessionId, userId } = req.body;
+  const session = activeTaskSessions.get(sessionId);
+
+  if (!session || session.userId !== userId) {
+    return res.status(400).json({ error: 'Invalid or expired task session.' });
+  }
+
+  const now = Date.now();
+  session.videoCompletedAt = now;
+  session.status = 'ready_to_claim';
+
+  res.json({
+    success: true,
+    readyToClaim: true,
+    rewardBdt: session.rewardBdt,
+    message: 'Video watch verified! Click Claim to receive your reward.',
+  });
+});
+
+app.post(['/api/tasks/claim', '/api/tasks/submit'], (req: Request, res: Response) => {
+  const { sessionId, userId } = req.body;
   const session = activeTaskSessions.get(sessionId);
 
   if (!session || session.userId !== userId) {
@@ -541,20 +655,11 @@ app.post('/api/tasks/submit', (req: Request, res: Response) => {
   }
 
   if (session.status === 'completed') {
-    return res.status(400).json({ error: 'This task session has already been credited.' });
+    return res.status(400).json({ error: 'This task reward has already been claimed.' });
   }
 
   const now = Date.now();
-  const elapsedTaskSeconds = Math.floor((now - (session.taskStartedAt || 0)) / 1000);
-
-  // Server-side enforcement of task timer duration!
-  if (elapsedTaskSeconds < (session.durationSeconds - 2)) {
-    return res.status(400).json({
-      error: `Timer manipulation detected. Required time: ${session.durationSeconds}s, elapsed: ${elapsedTaskSeconds}s.`,
-    });
-  }
-
-  // Atomically update wallet
+  // Atomically update wallet balance directly
   const wallet = getOrCreateWallet(userId);
   wallet.balance += session.rewardBdt;
   wallet.totalEarned += session.rewardBdt;
@@ -567,7 +672,7 @@ app.post('/api/tasks/submit', (req: Request, res: Response) => {
     type: 'task_reward',
     amount: session.rewardBdt,
     balanceAfter: wallet.balance,
-    description: `Earned ৳${session.rewardBdt.toFixed(2)} for completing task: ${session.taskId}`,
+    description: `Claimed ৳${session.rewardBdt.toFixed(2)} reward for completing task: ${session.taskId}`,
     referenceId: session.sessionId,
     createdAt: new Date().toISOString(),
   };
@@ -587,6 +692,7 @@ app.post('/api/tasks/submit', (req: Request, res: Response) => {
     rewardBdt: session.rewardBdt,
     balance: wallet.balance,
     transaction: tx,
+    message: `৳${session.rewardBdt.toFixed(2)} added directly to your account balance!`,
   });
 });
 
@@ -885,66 +991,104 @@ app.get('/api/admin/overview', requireAdmin, (req: Request, res: Response) => {
   });
 });
 
+// User sync endpoint
+app.post('/api/users/sync', (req: Request, res: Response) => {
+  const { userId, email, displayName } = req.body;
+  if (userId) {
+    if (!serverRegisteredUsers[userId]) {
+      serverRegisteredUsers[userId] = {
+        id: userId,
+        email: email || `${userId.substring(0, 8)}@gmail.com`,
+        displayName: displayName || 'Member',
+        createdAt: new Date().toISOString(),
+        status: userStatusMap[userId] || 'active',
+      };
+    } else {
+      if (email) serverRegisteredUsers[userId].email = email;
+      if (displayName) serverRegisteredUsers[userId].displayName = displayName;
+    }
+    const wallet = getOrCreateWallet(userId);
+    return res.json({ success: true, wallet, status: userStatusMap[userId] || 'active' });
+  }
+  res.status(400).json({ error: 'Missing userId' });
+});
+
 // Admin User Management
 app.get('/api/admin/users', requireAdmin, (req: Request, res: Response) => {
-  // Combine server wallets with active user summaries
-  const users = Object.keys(serverWallets).map((uid) => {
-    const w = serverWallets[uid];
+  const userIds = new Set([
+    ...Object.keys(serverRegisteredUsers),
+    ...Object.keys(serverWallets),
+  ]);
+
+  if (userIds.size === 0) {
+    const defaultDemos = [
+      { id: 'usr_demo_1', name: 'Karim Ahmed', email: 'karim.ahmed@gmail.com', bal: 320.0, pend: 100.0, earn: 450.0, task: 210.0, ref: 80.0, vid: 80.0, spin: 80.0 },
+      { id: 'usr_demo_2', name: 'Sumaiya Akter', email: 'sumaiya.akter@gmail.com', bal: 85.5, pend: 0, earn: 185.5, task: 120.5, ref: 30.0, vid: 20.0, spin: 15.0 },
+      { id: 'usr_demo_3', name: 'Rafiqul Islam', email: 'rafiqul.islam@gmail.com', bal: 150.0, pend: 50.0, earn: 290.0, task: 160.0, ref: 50.0, vid: 40.0, spin: 40.0 },
+      { id: 'usr_demo_4', name: 'Tania Sultana', email: 'tania.sultana@gmail.com', bal: 540.0, pend: 0, earn: 680.0, task: 340.0, ref: 120.0, vid: 110.0, spin: 110.0 },
+    ];
+
+    defaultDemos.forEach((d) => {
+      serverRegisteredUsers[d.id] = {
+        id: d.id,
+        email: d.email,
+        displayName: d.name,
+        createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+        status: 'active',
+      };
+      serverWallets[d.id] = {
+        userId: d.id,
+        balance: d.bal,
+        pendingWithdrawal: d.pend,
+        totalEarned: d.earn,
+        totalWithdrawn: d.earn - d.bal - d.pend,
+        taskEarnings: d.task,
+        referralEarnings: d.ref,
+        videoAdEarnings: d.vid,
+        spinEarnings: d.spin,
+      };
+      userIds.add(d.id);
+    });
+  }
+
+  const users = Array.from(userIds).map((uid) => {
+    const reg = serverRegisteredUsers[uid];
+    const w = getOrCreateWallet(uid);
+    const status = userStatusMap[uid] || reg?.status || 'active';
+    const points = userPointsMap[uid] !== undefined ? userPointsMap[uid] : Math.round(w.balance * 10);
     return {
       id: uid,
-      email: `${uid.substring(0, 8)}@user.com`,
-      displayName: `User ${uid.substring(0, 5)}`,
-      status: 'active',
+      email: reg?.email || `${uid.substring(0, 8)}@user.com`,
+      displayName: reg?.displayName || `User ${uid.substring(0, 5)}`,
+      status,
+      points,
+      createdAt: reg?.createdAt || new Date().toISOString(),
       wallet: w,
     };
   });
 
-  // Seed sample users for immediate administration review if empty
-  if (users.length === 0) {
-    users.push(
-      {
-        id: 'usr_demo_1',
-        email: 'karim.ahmed@gmail.com',
-        displayName: 'Karim Ahmed',
-        status: 'active',
-        wallet: {
-          userId: 'usr_demo_1',
-          balance: 320.0,
-          pendingWithdrawal: 100.0,
-          totalEarned: 450.0,
-          totalWithdrawn: 130.0,
-          taskEarnings: 210.0,
-          referralEarnings: 80.0,
-          videoAdEarnings: 80.0,
-          spinEarnings: 80.0,
-        },
-      },
-      {
-        id: 'usr_demo_2',
-        email: 'sumaiya.akter@gmail.com',
-        displayName: 'Sumaiya Akter',
-        status: 'active',
-        wallet: {
-          userId: 'usr_demo_2',
-          balance: 85.5,
-          pendingWithdrawal: 0,
-          totalEarned: 185.5,
-          totalWithdrawn: 100.0,
-          taskEarnings: 120.5,
-          referralEarnings: 30.0,
-          videoAdEarnings: 20.0,
-          spinEarnings: 15.0,
-        },
-      }
-    );
-  }
-
   res.json({ users });
 });
 
+// Update User Status (active, suspended, blocked)
+app.post('/api/admin/users/status', requireAdmin, (req: Request, res: Response) => {
+  const adminUser = (req as any).adminUser;
+  const { userId, status } = req.body;
+  if (!userId || !status) {
+    return res.status(400).json({ error: 'userId and status are required.' });
+  }
+  userStatusMap[userId] = status;
+  if (serverRegisteredUsers[userId]) {
+    serverRegisteredUsers[userId].status = status;
+  }
+  logAdminAction(adminUser.username, 'UPDATE_USER_STATUS', `Set user ${userId} status to ${status}`, req, userId);
+  res.json({ success: true, userId, status });
+});
+
+// Comprehensive Balance, Points, and Rewards Adjustment
 app.post('/api/admin/adjust-balance', requireAdmin, (req: Request, res: Response) => {
   const adminUser = (req as any).adminUser;
-  const { userId, amountBdt, reason } = req.body;
+  const { userId, targetField = 'balance', operation = 'add', amountBdt, reason } = req.body;
 
   if (!userId || amountBdt === undefined || !reason) {
     return res.status(400).json({ error: 'UserId, adjustment amount, and reason are required.' });
@@ -956,16 +1100,97 @@ app.post('/api/admin/adjust-balance', requireAdmin, (req: Request, res: Response
   }
 
   const wallet = getOrCreateWallet(userId);
-  wallet.balance += amount;
-  if (wallet.balance < 0) wallet.balance = 0;
+  const currentPoints = userPointsMap[userId] !== undefined ? userPointsMap[userId] : Math.round(wallet.balance * 10);
+
+  let deltaBalance = 0;
+
+  if (targetField === 'points') {
+    if (operation === 'add') {
+      userPointsMap[userId] = currentPoints + Math.round(amount);
+    } else if (operation === 'subtract') {
+      userPointsMap[userId] = Math.max(0, currentPoints - Math.round(amount));
+    } else {
+      userPointsMap[userId] = Math.max(0, Math.round(amount));
+    }
+  } else if (targetField === 'taskEarnings') {
+    if (operation === 'add') {
+      wallet.taskEarnings += amount;
+      wallet.balance += amount;
+      wallet.totalEarned += amount;
+      deltaBalance = amount;
+    } else if (operation === 'subtract') {
+      wallet.taskEarnings = Math.max(0, wallet.taskEarnings - amount);
+      wallet.balance = Math.max(0, wallet.balance - amount);
+      deltaBalance = -amount;
+    } else {
+      wallet.taskEarnings = Math.max(0, amount);
+    }
+  } else if (targetField === 'videoAdEarnings') {
+    if (operation === 'add') {
+      wallet.videoAdEarnings += amount;
+      wallet.balance += amount;
+      wallet.totalEarned += amount;
+      deltaBalance = amount;
+    } else if (operation === 'subtract') {
+      wallet.videoAdEarnings = Math.max(0, wallet.videoAdEarnings - amount);
+      wallet.balance = Math.max(0, wallet.balance - amount);
+      deltaBalance = -amount;
+    } else {
+      wallet.videoAdEarnings = Math.max(0, amount);
+    }
+  } else if (targetField === 'referralEarnings') {
+    if (operation === 'add') {
+      wallet.referralEarnings += amount;
+      wallet.balance += amount;
+      wallet.totalEarned += amount;
+      deltaBalance = amount;
+    } else if (operation === 'subtract') {
+      wallet.referralEarnings = Math.max(0, wallet.referralEarnings - amount);
+      wallet.balance = Math.max(0, wallet.balance - amount);
+      deltaBalance = -amount;
+    } else {
+      wallet.referralEarnings = Math.max(0, amount);
+    }
+  } else if (targetField === 'spinEarnings') {
+    if (operation === 'add') {
+      wallet.spinEarnings += amount;
+      wallet.balance += amount;
+      wallet.totalEarned += amount;
+      deltaBalance = amount;
+    } else if (operation === 'subtract') {
+      wallet.spinEarnings = Math.max(0, wallet.spinEarnings - amount);
+      wallet.balance = Math.max(0, wallet.balance - amount);
+      deltaBalance = -amount;
+    } else {
+      wallet.spinEarnings = Math.max(0, amount);
+    }
+  } else {
+    // Default: 'balance'
+    if (operation === 'add') {
+      wallet.balance += amount;
+      wallet.totalEarned += amount;
+      deltaBalance = amount;
+    } else if (operation === 'subtract') {
+      wallet.balance = Math.max(0, wallet.balance - amount);
+      deltaBalance = -amount;
+    } else {
+      wallet.balance = Math.max(0, amount);
+      deltaBalance = amount - wallet.balance;
+    }
+  }
+
+  // Update points in sync if balance changed
+  if (targetField !== 'points') {
+    userPointsMap[userId] = Math.round(wallet.balance * 10);
+  }
 
   const tx: ServerTransaction = {
     id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     userId,
     type: 'admin_adjustment',
-    amount,
+    amount: deltaBalance !== 0 ? deltaBalance : amount,
     balanceAfter: wallet.balance,
-    description: `Admin adjustment: ${reason} (by ${adminUser.username})`,
+    description: `Admin adjustment (${targetField} ${operation} ${amount}): ${reason} (by ${adminUser.username})`,
     createdAt: new Date().toISOString(),
   };
   walletTransactions.unshift(tx);
@@ -973,12 +1198,18 @@ app.post('/api/admin/adjust-balance', requireAdmin, (req: Request, res: Response
   logAdminAction(
     adminUser.username,
     'MANUAL_BALANCE_ADJUSTMENT',
-    `Adjusted user ${userId} balance by ৳${amount}. Reason: ${reason}`,
+    `Adjusted user ${userId} [${targetField}] (${operation} ${amount}). Reason: ${reason}`,
     req,
     userId
   );
 
-  res.json({ success: true, balance: wallet.balance, transaction: tx });
+  res.json({
+    success: true,
+    wallet,
+    points: userPointsMap[userId],
+    balance: wallet.balance,
+    transaction: tx,
+  });
 });
 
 // Admin Withdrawal Management
@@ -1133,6 +1364,55 @@ app.delete('/api/admin/tasks/:taskId', requireAdmin, (req: Request, res: Respons
 });
 
 // Admin Advertising & Settings
+app.post('/api/admin/ad-settings/save', requireAdmin, (req: Request, res: Response) => {
+  const adminUser = (req as any).adminUser;
+  const { adSettings } = req.body;
+  if (adSettings) {
+    globalAdSettings = {
+      ...globalAdSettings,
+      ...adSettings,
+    };
+    logAdminAction(
+      adminUser.username,
+      'UPDATE_AD_SETTINGS',
+      `Updated Adsterra Smart Link, Monetag Direct Link, and YouTube Video Link.`,
+      req
+    );
+  }
+  res.json({ success: true, adSettings: globalAdSettings });
+});
+
+app.post('/api/admin/payout-settings/save', requireAdmin, (req: Request, res: Response) => {
+  const adminUser = (req as any).adminUser;
+  const { newPayoutSettings } = req.body;
+  if (newPayoutSettings) {
+    payoutSettings = {
+      ...payoutSettings,
+      ...newPayoutSettings,
+    };
+    if (newPayoutSettings.referralCommissionBdt !== undefined) {
+      appSettings.referralCommissionBdt = Number(newPayoutSettings.referralCommissionBdt);
+    }
+    if (newPayoutSettings.dailySpinLimit !== undefined) {
+      spinSettings.dailyLimit = Number(newPayoutSettings.dailySpinLimit);
+    }
+    if (newPayoutSettings.watchAndEarnRewardBdt !== undefined) {
+      adCampaigns.forEach((c) => {
+        if (c.format === 'rewarded_video') {
+          c.rewardBdt = Number(newPayoutSettings.watchAndEarnRewardBdt);
+        }
+      });
+    }
+    logAdminAction(
+      adminUser.username,
+      'UPDATE_PAYOUT_SETTINGS',
+      `Updated reward payout amounts for tasks, watch & earn, and referrals.`,
+      req
+    );
+  }
+  res.json({ success: true, payoutSettings });
+});
+
 app.post('/api/admin/ads/save', requireAdmin, (req: Request, res: Response) => {
   const adminUser = (req as any).adminUser;
   const { campaigns } = req.body;

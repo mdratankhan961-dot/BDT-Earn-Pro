@@ -277,6 +277,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshWallet = async () => {
     if (!currentUser) return;
     try {
+      // 1. Fetch latest server wallet
+      const res = await fetch('/api/users/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.uid,
+          email: currentUser.email,
+          displayName: currentUser.displayName || 'Member',
+        }),
+      });
+
+      if (res.ok) {
+        const d = await res.json();
+        if (d.wallet) {
+          setWallet({
+            id: currentUser.uid,
+            userId: currentUser.uid,
+            balance: Number(d.wallet.balance) || 0,
+            pendingWithdrawal: Number(d.wallet.pendingWithdrawal) || 0,
+            totalEarned: Number(d.wallet.totalEarned) || 0,
+            totalWithdrawn: Number(d.wallet.totalWithdrawn) || 0,
+            taskEarnings: Number(d.wallet.taskEarnings) || 0,
+            referralEarnings: Number(d.wallet.referralEarnings) || 0,
+            videoAdEarnings: Number(d.wallet.videoAdEarnings) || 0,
+            spinEarnings: Number(d.wallet.spinEarnings) || 0,
+            updatedAt: new Date().toISOString(),
+          });
+          return;
+        }
+      }
+
+      // 2. Fallback to Firestore wallet document
       const wDoc = await getDoc(doc(db, 'wallets', currentUser.uid));
       if (wDoc.exists()) {
         const data = wDoc.data();

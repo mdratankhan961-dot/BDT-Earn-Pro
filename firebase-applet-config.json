@@ -1,12 +1,12 @@
 {
   "projectId": "bdt-earn-pro",
-  "appId": "1:26614115540:web:3fdf151819d85ca7d75f41",
+  "appId": "1:26614115540:web:759c9abdac87e249d75f41",
   "apiKey": "AIzaSyCU6T5EjYERS013LtbZIokCWcdGfwxyzo4",
   "authDomain": "bdt-earn-pro.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-bdtearnpropremiu-69ae8112-eea6-42bd-bc31-d1322cf423b3",
   "storageBucket": "bdt-earn-pro.firebasestorage.app",
   "messagingSenderId": "26614115540",
-  "measurementId": "G-BY0H85XQQ7",
-  "oAuthClientId": "",
-  "recaptchaSiteKey": "",
-  "firestoreDatabaseId": "(default)"
+  "measurementId": "",
+  "oAuthClientId": "26614115540-uokte97kcf2qkl29sc3ul4upfum0a48k.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

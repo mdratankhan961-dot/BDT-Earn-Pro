@@ -2,32 +2,20 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getAnalytics, isSupported, Analytics } from 'firebase/analytics';
+import firebaseConfig from './firebase-applet-config.json';
 
-// Web app's Firebase configuration
-export const firebaseConfig = {
-  apiKey: "AIzaSyCU6T5EjYERS013LtbZIokCWcdGfwxyzo4",
-  authDomain: "bdt-earn-pro.firebaseapp.com",
-  projectId: "bdt-earn-pro",
-  storageBucket: "bdt-earn-pro.firebasestorage.app",
-  messagingSenderId: "26614115540",
-  appId: "1:26614115540:web:3fdf151819d85ca7d75f41",
-  measurementId: "G-BY0H85XQQ7",
-  firestoreDatabaseId: "(default)"
-};
+export { firebaseConfig };
 
 // Initialize Firebase App
 export const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore
-export const db =
-  firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
-    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-    : getFirestore(app);
+// CRITICAL: Initialize Firestore explicitly with firestoreDatabaseId from config
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // Initialize Firebase Authentication
 export const auth = getAuth(app);
 
-// Initialize Firebase Analytics
+// Initialize Firebase Analytics (browser environment check)
 export let analytics: Analytics | null = null;
 if (typeof window !== 'undefined') {
   isSupported()
@@ -97,7 +85,7 @@ export async function testConnection(): Promise<void> {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
+      console.warn('Firebase connection notice: Client is offline or establishing connection.');
     }
   }
 }

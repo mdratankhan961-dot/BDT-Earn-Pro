@@ -63,8 +63,36 @@ export interface TaskItem {
   currentCompletions: number;
   status: 'active' | 'inactive';
   targetUrl?: string;
+  youtubeUrl?: string;
+  adProvider?: 'adsterra' | 'monetag';
+  adDirectUrl?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface AdSettings {
+  adsterraSmartLink: string;
+  monetagDirectLink: string;
+  defaultYoutubeUrl: string;
+  activeProvider: 'adsterra' | 'monetag' | 'rotate';
+  adCountdownSeconds: number;
+}
+
+export interface PayoutSettings {
+  defaultTaskRewardBdt: number;
+  watchAndEarnRewardBdt: number;
+  referralCommissionBdt: number;
+  dailySpinLimit: number;
+}
+
+export interface AdminUserItem {
+  id: string;
+  email: string;
+  displayName: string;
+  status: UserStatus;
+  role: UserRole;
+  createdAt?: string;
+  wallet: Wallet;
 }
 
 export interface TaskSession {

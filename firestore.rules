@@ -31,6 +31,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Connectivity test probe
+    match /test/{testId} {
+      allow read: if true;
+    }
+
     // Users
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();

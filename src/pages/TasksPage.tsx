@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useThemeLanguage } from '../context/ThemeLanguageContext';
 import { useToast } from '../components/Toast';
 import { AdModal } from '../components/AdModal';
+import { TaskWorkflowModal } from '../components/TaskWorkflowModal';
 import { fireRewardConfetti } from '../lib/confetti';
 import { TaskItem } from '../types';
 import {
@@ -27,13 +28,17 @@ export const TasksPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
-  // Active Session state
-  const [activeSession, setActiveSession] = useState<{
+  // Interactive 3-Step Task Workflow Session State
+  const [workflowSession, setWorkflowSession] = useState<{
+    isOpen: boolean;
     sessionId: string;
     task: TaskItem;
-    adRequired: boolean;
+    adProvider: 'adsterra' | 'monetag';
+    adUrl: string;
+    youtubeUrl: string;
+    durationSeconds: number;
+    rewardBdt: number;
     adCountdownSeconds: number;
-    sponsorUrl: string;
   } | null>(null);
 
   const [isAdModalOpen, setIsAdModalOpen] = useState(false);
@@ -90,50 +95,20 @@ export const TasksPage: React.FC = () => {
         return;
       }
 
-      const sessionObj = {
+      setWorkflowSession({
+        isOpen: true,
         sessionId: data.sessionId,
         task,
-        adRequired: data.adRequired,
+        adProvider: data.adProvider || 'adsterra',
+        adUrl: data.adUrl || data.sponsorUrl || 'https://www.highcpmgate.com/sample-smartlink',
+        youtubeUrl: data.youtubeUrl || task.youtubeUrl || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        durationSeconds: data.durationSeconds || task.timerDurationSeconds || 25,
+        rewardBdt: data.rewardBdt || task.rewardBdt || 5.0,
         adCountdownSeconds: data.adCountdownSeconds || 10,
-        sponsorUrl: data.sponsorUrl || 'https://monetag.com',
-      };
-
-      setActiveSession(sessionObj);
-      setCompletedSuccess(false);
-      setSubmissionNote('');
-
-      // Open the Ad countdown modal if adRequired is true
-      if (data.adRequired) {
-        setIsAdModalOpen(true);
-      } else {
-        // Direct unlock if no ad required
-        setUnlockedTaskSession({
-          sessionId: data.sessionId,
-          task,
-          taskStartedAt: Date.now(),
-          durationSeconds: data.durationSeconds,
-          secondsRemaining: data.durationSeconds,
-        });
-      }
+      });
     } catch (err: any) {
       showToast(err.message || 'Network error.', 'error');
     }
-  };
-
-  // 2. Ad session completed callback
-  const handleAdVerified = (taskStartedAt: number, durationSeconds: number) => {
-    setIsAdModalOpen(false);
-    if (!activeSession) return;
-
-    showToast(t('adCompletedUnlocked'), 'success');
-
-    setUnlockedTaskSession({
-      sessionId: activeSession.sessionId,
-      task: activeSession.task,
-      taskStartedAt,
-      durationSeconds,
-      secondsRemaining: durationSeconds,
-    });
   };
 
   // 3. Task timer interval
@@ -402,20 +377,25 @@ export const TasksPage: React.FC = () => {
         ))}
       </div>
 
-      {/* Sponsored Ad Countdown Modal */}
-      {activeSession && (
-        <AdModal
-          isOpen={isAdModalOpen}
-          onClose={() => {
-            setIsAdModalOpen(false);
-            setActiveSession(null);
-            showToast(t('taskCancelled'), 'info');
-          }}
-          sessionId={activeSession.sessionId}
+      {/* 3-Step Interactive Task Workflow Modal */}
+      {workflowSession && workflowSession.isOpen && (
+        <TaskWorkflowModal
+          isOpen={workflowSession.isOpen}
+          onClose={() => setWorkflowSession(null)}
+          sessionId={workflowSession.sessionId}
+          task={workflowSession.task}
           userId={currentUser?.uid || ''}
-          sponsorUrl={activeSession.sponsorUrl}
-          adCountdownSeconds={activeSession.adCountdownSeconds}
-          onAdVerified={handleAdVerified}
+          adProvider={workflowSession.adProvider}
+          adUrl={workflowSession.adUrl}
+          youtubeUrl={workflowSession.youtubeUrl}
+          durationSeconds={workflowSession.durationSeconds}
+          rewardBdt={workflowSession.rewardBdt}
+          adCountdownSeconds={workflowSession.adCountdownSeconds}
+          onClaimSuccess={async (reward, newBal) => {
+            showToast(`Earned ৳${reward.toFixed(2)} credited to your wallet balance!`, 'success');
+            await refreshWallet();
+            fetchTasks();
+          }}
         />
       )}
     </div>
